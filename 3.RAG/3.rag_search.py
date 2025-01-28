@@ -47,7 +47,7 @@ def load_and_process_pdf():
 
     data = pdf_loader.load_and_split(text_splitter=splitter)
 
-    # 벡터 데이터베이스 구성
+    # 벡터 스토어 구성
     vectorstore = Chroma.from_documents(
         documents=data,
         embedding=embeddings,
