@@ -5,6 +5,9 @@ from langchain_aws import ChatBedrock
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferMemory
 
+# 사이드바 기본값을 접힌 상태로 설정
+st.set_page_config(initial_sidebar_state="collapsed")
+
 # AWS Bedrock 클라이언트 초기화
 bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
 
@@ -15,7 +18,8 @@ bedrock = ChatBedrock(
     model_kwargs={"anthropic_version": "bedrock-2023-05-31"},
 )
 
-memory = ConversationBufferMemory(return_messages=True)
+# 버퍼 메모리 초기화 (모든 대화 기록 유지)
+memory = ConversationBufferMemory(return_messages=True, memory_key="history")
 
 # 세션 상태 초기화
 if "messages" not in st.session_state:
@@ -24,10 +28,24 @@ if "memory" not in st.session_state:
     st.session_state.memory = memory
 
 # ConversationChain 초기화 (메모리는 세션 상태에서 사용)
-conversation = ConversationChain(llm=bedrock, memory=st.session_state.memory)
+conversation = ConversationChain(
+    llm=bedrock, memory=st.session_state.memory, verbose=True
+)
 
 # Streamlit 앱 설정
-st.title("Chatbot Ver.2.1 : LangChain 기반 대화 맥락 이해 챗봇")
+st.title("Chatbot Ver.2.1 : 전체 대화 컨텍스트 유지 챗봇")
+st.caption("모든 대화 내역을 메모리에 저장하여 장기 컨텍스트를 유지합니다.")
+
+# 사이드바에 메모리 정보 표시
+with st.sidebar:
+    st.subheader("📊 메모리 통계")
+    st.write(f"저장된 대화 수: {len(st.session_state.messages) // 2}")
+
+    # 대화 기록 초기화 버튼
+    if st.button("🗑️ 대화 기록 초기화"):
+        st.session_state.messages = []
+        st.session_state.memory.clear()
+        st.success("대화 기록이 초기화되었습니다.")
 
 # 대화 히스토리 표시
 for message in st.session_state.messages:
@@ -49,3 +67,12 @@ if prompt := st.chat_input("Message Bedrock..."):
 
     # 모델 응답 추가
     st.session_state.messages.append({"role": "assistant", "content": response})
+
+# 메모리 상태 확인
+with st.expander("🔍 시스템 상태 확인"):
+    st.subheader("메모리 상태")
+    st.json(conversation.memory.load_memory_variables({}))
+
+# 푸터 추가
+st.markdown("---")
+st.caption("© 2024 버퍼 메모리 기반 AI 챗봇 | 모든 대화 내역이 메모리에 저장됩니다.")
