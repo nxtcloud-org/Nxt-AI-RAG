@@ -1,0 +1,11 @@
+streamlit==1.41.1
+boto3==1.36.2
+langchain
+langchain-community
+langchain-core
+langchain-aws
+langchain_community
+anthropic
+pypdf
+tiktoken
+chromadb
