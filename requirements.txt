@@ -1,5 +1,5 @@
-streamlit==1.41.1
-boto3==1.36.2
+streamlit>=1.41.1
+boto3>=1.36.2
 langchain
 langchain-community
 langchain-core
@@ -9,3 +9,4 @@ anthropic
 pypdf
 tiktoken
 chromadb
+python-dotenv
