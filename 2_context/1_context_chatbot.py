@@ -22,6 +22,7 @@ if "token_usage" not in st.session_state:
         "last_total_tokens": 0,  # 최근 통합 토큰 수
     }
 
+
 def get_response_from_bedrock(messages):
     """
     Bedrock 모델에 대화 히스토리를 기반으로 요청을 보내고 응답을 받는 함수
@@ -40,29 +41,29 @@ def get_response_from_bedrock(messages):
 
         # Bedrock 모델 호출
         response = bedrock_runtime.invoke_model(
-            modelId=FILL_ME_IN
+            modelId=FILL_ME_IN,
             body=body,  # 요청 본문
         )
         response_body = json.loads(response.get("body").read())  # 응답 본문 파싱
-        
+
         ### AI 응답 데이터의 형식과 내용을 확인하세요. ###
         ### 응답 데이터를 참고하여 아래 추출 데이터를 적절하게 변수에 할당하세요.
-        
+
         # 모델 출력 추출
         output_text = FILL_ME_IN
 
         # 토큰 사용량 추출
-        input_tokens = FILL_ME_IN # 입력 토큰 수 추출
-        output_tokens = FILL_ME_IN # 출력 토큰 수 추출
-        total_tokens = input_tokens + output_tokens # 입출력 토큰 수 계산
+        input_tokens = FILL_ME_IN  # 입력 토큰 수 추출
+        output_tokens = FILL_ME_IN  # 출력 토큰 수 추출
+        total_tokens = input_tokens + output_tokens  # 입출력 토큰 수 계산
 
         # 세션 상태에 토큰 사용량 업데이트
-        
+
         ## 최신 토큰 기록
         st.session_state.token_usage["last_input_tokens"] = input_tokens
         st.session_state.token_usage["last_output_tokens"] = output_tokens
         st.session_state.token_usage["last_total_tokens"] = total_tokens
-        
+
         ## 누적 토큰 기록
         st.session_state.token_usage["input_tokens"] += input_tokens
         st.session_state.token_usage["output_tokens"] += output_tokens
@@ -74,6 +75,7 @@ def get_response_from_bedrock(messages):
         st.error(f"Bedrock과 통신 중 에러 발생: {str(e)}")
         return "응답 생성 중 에러 발생"
 
+
 # 화면 상단에 st.metric으로 토큰 사용량 표시
 header, button = st.columns(2)
 with header:
@@ -81,7 +83,7 @@ with header:
 with button:
     if st.button("토큰 사용량 새로고침"):
         st.rerun()
-        
+
 current, total = st.tabs(["최신", "누적"])
 with current:
     input_token, output_token, all_token = st.columns(3)
@@ -104,20 +106,20 @@ with total:
     total_input_token, total_output_token, total_all_token = st.columns(3)
     with total_input_token:
         st.metric(
-        label="누적 입력 토큰 수",
-        value=st.session_state.token_usage["input_tokens"],
-    )
+            label="누적 입력 토큰 수",
+            value=st.session_state.token_usage["input_tokens"],
+        )
     with total_output_token:
         st.metric(
-        label="누적 출력 토큰 수",
-        value=st.session_state.token_usage["output_tokens"],
-    )
+            label="누적 출력 토큰 수",
+            value=st.session_state.token_usage["output_tokens"],
+        )
     with total_all_token:
         st.metric(
-        label="누적 입출력 토큰 수",
-        value=st.session_state.token_usage["total_tokens"],
-    )
-    
+            label="누적 입출력 토큰 수",
+            value=st.session_state.token_usage["total_tokens"],
+        )
+
 st.divider()
 st.subheader("챗봇 🤖 💬", divider="rainbow")
 
@@ -137,7 +139,9 @@ if prompt := st.chat_input("Message Bedrock..."):  # 사용자 입력을 받음
 
     # Bedrock에 대화 히스토리를 전달하여 응답 생성
     with st.chat_message("assistant"):
-        response = get_response_from_bedrock(st.session_state.messages)  # 전체 히스토리 전달
+        response = get_response_from_bedrock(
+            st.session_state.messages
+        )  # 전체 히스토리 전달
         st.markdown(response)  # 모델 응답을 화면에 표시
 
     # 모델의 응답을 대화 히스토리에 추가
