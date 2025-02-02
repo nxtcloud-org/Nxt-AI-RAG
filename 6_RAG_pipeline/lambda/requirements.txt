@@ -1,6 +1,6 @@
 langchain
 langchain-community
-
-aws-psycopg2
-tiktoken
+langchain-aws
 pypdf
+psycopg2-binary
+tiktoken
