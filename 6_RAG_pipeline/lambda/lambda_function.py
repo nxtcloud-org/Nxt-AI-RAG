@@ -1,14 +1,16 @@
 import os
 import json
+import tempfile
 import boto3
 import psycopg2
 import psycopg2.extras
+from langchain_aws import BedrockEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
-import tempfile
 
-bedrock = boto3.client(service_name='bedrock-runtime',region_name='us-east-1')
 s3_client = boto3.client('s3')
+bedrock_client = boto3.client(service_name='bedrock-runtime',region_name='us-east-1')
+embeddings = BedrockEmbeddings(client=bedrock_client, model_id="amazon.titan-embed-text-v1")
 
 def lambda_handler(event, context):
     # 환경 변수
@@ -19,6 +21,9 @@ def lambda_handler(event, context):
     
     bucket_name = event['Records'][0]['s3']['bucket']['name']
     file_key = event['Records'][0]['s3']['object']['key']
+    
+    print(f"처리 시작 - 버킷이름: {bucket_name}")
+    print(f"처리 파일: {file_key}")
     
     try:
 
@@ -43,54 +48,46 @@ def lambda_handler(event, context):
         )
         cursor = conn.cursor()
         
+        print(f"데이터베이스 연결 완료")
+        print(f"데이터베이스 호스트: {DB_HOST}")
+        print(f"데이터베이스 이름: {DB_NAME}")
+        print(f"데이터베이스 사용자: {DB_USER}")
+        print(f"총 처리할 청크 개수: {len(chunks)}")
+        
         successful_chunks = 0
         
         for chunk in chunks:
-            try:
-                cleaned_content = chunk.page_content.encode().decode().replace("\x00", "").strip()
+            cleaned_content = chunk.page_content.encode().decode().replace("\x00", "").strip()
 
-                if not cleaned_content:
-                    continue
-
-                embedding_response = bedrock.invoke_model(
-                    modelId='amazon.titan-embed-text-v1',
-                    contentType='application/json',
-                    accept='application/json',
-                    body=json.dumps({
-                        "inputText": cleaned_content
-                    })
-                )
-                
-                response_body = json.loads(embedding_response.get('body').read().decode())
-                embedding_vector = response_body['embedding']
-                
-                metadata = {
-                    'page': chunk.metadata.get('page', 0)+1
-                }
-                
-                # 데이터베이스에 저장
-                cursor.execute("""
-                    INSERT INTO documents (content, embedding, metadata)
-                    VALUES (%s, %s, %s)
-                """, (
-                    cleaned_content,
-                    embedding_vector,
-                    json.dumps(metadata)
-                ))
-                successful_chunks += 1
-                
-            except Exception as e:
-                print(f"Error processing chunk: {str(e)}")
+            if not cleaned_content:
                 continue
-        
+
+            embedding_vector = embeddings.embed_query(cleaned_content)
+            
+            metadata = {
+                'page': chunk.metadata.get('page', 0)+1
+            }
+            
+            # 데이터베이스에 저장
+            cursor.execute("""
+                INSERT INTO documents (content, embedding, metadata)
+                VALUES (%s, %s, %s)
+            """, (
+                cleaned_content,
+                embedding_vector,
+                json.dumps(metadata)
+            ))
+            successful_chunks += 1
+            
         conn.commit()
         
-        print("Document processed successfully")
-        print(f"Total chunks processed: {len(chunks)}")
-        print(f"Successfully processed chunks: {successful_chunks}")
+        print(f"문서 처리 완료")
+        print(f"성공적으로 처리된 청크 개수: {successful_chunks}")
         
     except Exception as e:
-        print(f"Error processing document: {str(e)}")
+        print(f"PDF 파일 처리 중 오류 발생: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
         
     finally:
         if 'conn' in locals():
