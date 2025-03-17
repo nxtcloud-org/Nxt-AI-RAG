@@ -19,7 +19,7 @@ bedrock = ChatBedrock(
 # 한글 요약을 강제하는 프롬프트
 summary_prompt = PromptTemplate(
     input_variables=["summary", "new_lines"],
-    template="다음은 AI와 사용자의 대화 기록입니다.\n{summary}\n\n새로운 내용:\n{new_lines}\n\n위 내용을 **한글로** 요약하세요.",
+    template="다음은 AI와 사용자의 대화 를 간략하게 요약해서 메모리로 유지해라 \n{summary} 내용에 {new_lines} 를 합친다음 **한글로** 요약해서 summary memory를 유지합니다.",
 )
 
 # ConversationSummaryMemory에 한글 요약 프롬프트 적용
