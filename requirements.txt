@@ -10,3 +10,4 @@ pypdf
 tiktoken
 chromadb
 python-dotenv
+psycopg2-binary
