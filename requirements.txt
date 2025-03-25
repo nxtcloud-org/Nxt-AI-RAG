@@ -11,3 +11,6 @@ tiktoken
 chromadb
 python-dotenv
 psycopg2-binary
+datasets
+matplotlib
+ragas
