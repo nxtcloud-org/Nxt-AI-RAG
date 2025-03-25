@@ -51,6 +51,8 @@ def create_database_and_user(user_index):
                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
            )
         ''')
+        cursor.execute(f"GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO {user_name}")
+        
         print(f"Vector extension installed in {db_name}")
     
     db_conn.close()
