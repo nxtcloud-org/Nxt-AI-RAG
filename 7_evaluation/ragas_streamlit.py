@@ -414,8 +414,45 @@ def main():
             st.subheader("테스트 데이터 입력")
             st.info("기본값이 제공된 샘플 데이터를 수정하거나 그대로 사용할 수 있습니다.")
             
+            # 데이터 초기화 및 불러오기 버튼
+            button_container = st.container()
+            with button_container:
+                col1, col2 = st.columns([1, 1], gap="small")
+                with col1:
+                    if st.button("전체 데이터 지우기", type="secondary", use_container_width=True):
+                        # 현재 항목 수 저장
+                        current_n_items = st.session_state.get('n_items', 5)
+                        # session_state 완전 초기화
+                        st.session_state.clear()
+                        # 필요한 상태만 다시 설정
+                        st.session_state['n_items'] = current_n_items
+                        st.session_state['clear_data'] = True
+                        # 모든 입력 필드를 빈 값으로 초기화
+                        for i in range(10):  # 최대 가능한 항목 수
+                            st.session_state[f"q_{i}"] = ""
+                            st.session_state[f"r_{i}"] = ""
+                            st.session_state[f"ref_{i}"] = ""
+                            st.session_state[f"ctx_{i}"] = ""
+                        st.rerun()
+                with col2:
+                    if st.button("기본 테스트 데이터 불러오기", type="secondary", use_container_width=True):
+                        # 현재 항목 수 저장
+                        current_n_items = st.session_state.get('n_items', 5)
+                        # session_state 완전 초기화
+                        st.session_state.clear()
+                        # 필요한 상태만 다시 설정
+                        st.session_state['n_items'] = current_n_items
+                        st.session_state['clear_data'] = False
+                        st.rerun()
+            
             # 여러 항목 입력을 위한 컨테이너
-            n_items = st.number_input("테스트 항목 수", min_value=1, max_value=10, value=5)
+            if 'n_items' not in st.session_state:
+                st.session_state['n_items'] = 5
+            
+            n_items = st.number_input("테스트 항목 수", min_value=1, max_value=10, value=st.session_state['n_items'])
+            if n_items != st.session_state['n_items']:
+                st.session_state['n_items'] = n_items
+                st.rerun()
             
             test_data = {
                 "question": [],
@@ -428,19 +465,36 @@ def main():
                 st.markdown(f"### 테스트 항목 {i+1}")
                 col1, col2 = st.columns(2)
                 
-                # 기본값 설정 (기본 데이터의 범위를 벗어나면 빈 문자열 사용)
-                default_q = default_data["question"][i] if i < len(default_data["question"]) else ""
-                default_r = default_data["response"][i] if i < len(default_data["response"]) else ""
-                default_ref = default_data["reference"][i] if i < len(default_data["reference"]) else ""
-                default_ctx = "\n".join(default_data["contexts"][i]) if i < len(default_data["contexts"]) else ""
+                # 각 필드의 키 생성
+                q_key = f"q_{i}"
+                r_key = f"r_{i}"
+                ref_key = f"ref_{i}"
+                ctx_key = f"ctx_{i}"
+                
+                if 'clear_data' in st.session_state and st.session_state['clear_data']:
+                    # 전체 데이터 지우기가 활성화된 경우
+                    st.session_state[q_key] = ""
+                    st.session_state[r_key] = ""
+                    st.session_state[ref_key] = ""
+                    st.session_state[ctx_key] = ""
+                    default_q = ""
+                    default_r = ""
+                    default_ref = ""
+                    default_ctx = ""
+                else:
+                    # 기본 데이터 사용
+                    default_q = default_data["question"][i] if i < len(default_data["question"]) else ""
+                    default_r = default_data["response"][i] if i < len(default_data["response"]) else ""
+                    default_ref = default_data["reference"][i] if i < len(default_data["reference"]) else ""
+                    default_ctx = "\n".join(default_data["contexts"][i]) if i < len(default_data["contexts"]) else ""
                 
                 with col1:
-                    q = st.text_area(f"질문 {i+1}", value=default_q, key=f"q_{i}")
-                    r = st.text_area(f"응답 {i+1}", value=default_r, key=f"r_{i}")
+                    q = st.text_area(f"질문 {i+1}", value=default_q, key=q_key)
+                    r = st.text_area(f"응답 {i+1}", value=default_r, key=r_key)
                 
                 with col2:
-                    ref = st.text_area(f"참조 정답 {i+1}", value=default_ref, key=f"ref_{i}")
-                    ctx = st.text_area(f"컨텍스트 {i+1} (줄바꿈으로 구분)", value=default_ctx, key=f"ctx_{i}")
+                    ref = st.text_area(f"참조 정답 {i+1}", value=default_ref, key=ref_key)
+                    ctx = st.text_area(f"컨텍스트 {i+1} (줄바꿈으로 구분)", value=default_ctx, key=ctx_key)
                 
                 if q and r and ref and ctx:
                     test_data["question"].append(q)
