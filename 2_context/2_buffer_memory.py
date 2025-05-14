@@ -18,14 +18,14 @@ bedrock = ChatBedrock(
     model_kwargs={"anthropic_version": "bedrock-2023-05-31"},
 )
 
-# 버퍼 메모리 초기화 (모든 대화 기록 유지)
-memory = ConversationBufferMemory(return_messages=True, memory_key="history")
-
 # 세션 상태 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = []  # 대화 히스토리
 if "memory" not in st.session_state:
-    st.session_state.memory = memory
+    # 버퍼 메모리 초기화 (모든 대화 기록 유지)
+    st.session_state.memory = ConversationBufferMemory(
+        return_messages=True, memory_key="history"
+    )
 
 # ConversationChain 초기화 (메모리는 세션 상태에서 사용)
 conversation = ConversationChain(
