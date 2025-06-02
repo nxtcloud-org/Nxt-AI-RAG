@@ -39,7 +39,12 @@ def init_bedrock():
     llm = ChatBedrock(
         client=bedrock_client,
         model_id="anthropic.claude-3-haiku-20240307-v1:0",
-        model_kwargs={"anthropic_version": "bedrock-2023-05-31"},
+        model_kwargs={
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 4000,
+            "temperature": 0.1
+        },
+        streaming=True
     )
     
     conversation = RunnableWithMessageHistory(
@@ -191,69 +196,74 @@ with st.sidebar:
         st.session_state.messages = []
         st.toast("대화 기록이 초기화되었습니다.", icon="✅")
 
+# 이전 대화 기록 표시
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
 search_query = st.chat_input("예: 졸업요건이 뭐야?")
 if search_query:
-
     st.session_state.messages.append({"role": "user", "content": search_query})
     
     if not docs_exist:  
         st.warning("⚠️ 먼저 문서를 업로드해주세요!")
     else:
-        # 사용자 질문만 화면에 표시
+        # 사용자 질문 표시
         with st.chat_message("user"):
             st.write(search_query)
         
         try:
             with st.chat_message("assistant"):
-                with st.spinner("답변을 생성하고 있습니다..."):
+                # 문서 검색 단계 표시
+                with st.status("답변을 준비하고 있습니다...", expanded=True) as status:
+                    st.write("🔍 관련 문서를 검색하고 있습니다...")
+                    
                     # 1. 질문의 임베딩 생성
                     query_embedding = get_embedding(search_query, bedrock_client)
                     
                     # 2. 유사한 문서 검색
                     similar_chunks = find_similar_chunks(query_embedding)
+                    st.write(f"✅ {len(similar_chunks)}개의 관련 문서를 찾았습니다.")
                     
                     # 3. 컨텍스트 구성
                     context = "\n\n".join([chunk[0] for chunk in similar_chunks])
-                    
-                    # 4. 프롬프트 구성 
-                    prompt = HumanMessage(content=f"""이전 대화 기록과 문서 내용을 참고하여 답변해주세요.
-                    
-                    질문: {search_query}
-                    
-                    관련 문서 내용:
-                    {context}
-                    
-                    위 내용과 이전 대화 맥락을 바탕으로 질문에 대해 명확하고 친절하게 답변해주세요. 
-                    문서에 없는 내용은 언급하지 말고, 확실한 정보만 답변에 포함해주세요.""")
-                    
-                    # 5. 답변 생성 및 표시
-                    response = conversation.invoke(
-                        [prompt],
-                        config={"configurable": {"session_id": "default"}}
-                    )
-                    
-                    response_content = response.content if hasattr(response, 'content') else str(response)
-                    st.markdown(response_content)
+                    st.write("📝 답변을 생성하고 있습니다...")
+                    status.update(label="답변 생성 완료!", state="complete", expanded=False)
+                
+                # 4. 프롬프트 구성 
+                prompt = HumanMessage(content=f"""이전 대화 기록과 문서 내용을 참고하여 답변해주세요.
+                
+                질문: {search_query}
+                
+                관련 문서 내용:
+                {context}
+                
+                위 내용과 이전 대화 맥락을 바탕으로 질문에 대해 명확하고 친절하게 답변해주세요. 
+                문서에 없는 내용은 언급하지 말고, 확실한 정보만 답변에 포함해주세요.""")
+                
+                # 5. 스트리밍 답변 생성 및 표시
+                response_placeholder = st.empty()
+                full_response = ""
+                
+                # 스트리밍 방식으로 응답 받기
+                for chunk in conversation.stream(
+                    [prompt],
+                    config={"configurable": {"session_id": "default"}}
+                ):
+                    if hasattr(chunk, 'content') and chunk.content:
+                        full_response += chunk.content
+                        response_placeholder.markdown(full_response)
 
-                    # 6. 참고한 문서 표시
-                    with st.expander("📚 참고한 문서"):
-                        for i, (content, metadata) in enumerate(similar_chunks, 1):
-                            st.markdown(f"**문서 {i}:**")
-                            st.write(content)
-                            if metadata:
-                                st.caption(f"출처: {metadata.get('page', 'N/A')}페이지")
+                # 6. 참고한 문서 표시
+                with st.expander("📚 참고한 문서"):
+                    for i, (content, metadata) in enumerate(similar_chunks, 1):
+                        st.markdown(f"**문서 {i}:**")
+                        st.write(content[:500] + "..." if len(content) > 500 else content)
+                        if metadata:
+                            st.caption(f"출처: {metadata.get('page', 'N/A')}페이지")
 
-                    with st.expander("📊 상세 정보"):
-                        st.json({
-                            "모델": response.additional_kwargs.get("model_id", "N/A"),
-                            "토큰 사용량": response.additional_kwargs.get("usage", {}),
-                            "응답 ID": response.id
-                        })
-
-            st.session_state.messages.append({"role": "assistant", "content": response_content})
+                # 대화 기록에 저장
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
         except Exception as e:
             st.error(f"⚠️ 답변 생성 중 오류가 발생했습니다: {str(e)}")
