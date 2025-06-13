@@ -13,4 +13,9 @@ python-dotenv
 psycopg2-binary
 datasets
 matplotlib
-ragas
+ragas>=0.0.16
+openevals>=0.1.0
+langchain-anthropic
+plotly
+sentence-transformers
+scikit-learn
