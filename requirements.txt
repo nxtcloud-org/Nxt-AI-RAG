@@ -4,7 +4,7 @@ langchain
 langchain-community
 langchain-core
 langchain-aws
-langchain_community
+langchain-anthropic
 anthropic
 pypdf
 tiktoken
@@ -15,7 +15,6 @@ datasets
 matplotlib
 ragas>=0.0.16
 openevals>=0.1.0
-langchain-anthropic
 plotly
-sentence-transformers
-scikit-learn
+numpy
+requests

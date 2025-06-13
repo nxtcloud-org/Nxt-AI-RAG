@@ -10,14 +10,33 @@ import openevals
 import plotly.express as px
 import tempfile
 import importlib
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+import requests
+import numpy as np
+import boto3
+from langchain_aws import BedrockEmbeddings
 
 # 환경 변수 로드
 load_dotenv()
 
 # 페이지 설정
 st.set_page_config(page_title="OpenEvals 평가 대시보드", layout="wide")
+
+
+# 간단한 텍스트 유사도 계산 함수 (torch 없이)
+def simple_text_similarity(text1, text2):
+    """간단한 텍스트 유사도 계산 (단어 기반)"""
+    # 단어 분할 및 소문자 변환
+    words1 = set(text1.lower().split())
+    words2 = set(text2.lower().split())
+
+    # 교집합과 합집합 계산
+    intersection = words1.intersection(words2)
+    union = words1.union(words2)
+
+    # Jaccard 유사도 계산
+    if len(union) == 0:
+        return 0.0
+    return len(intersection) / len(union)
 
 
 # 폰트 설정 함수
@@ -32,18 +51,52 @@ def setup_korean_font():
         return False
 
 
-# 임베딩 기반 유사도 계산 함수
 @st.cache_resource
-def load_embedding_model():
-    """임베딩 모델 로드 (캐시됨)"""
-    return SentenceTransformer("all-MiniLM-L6-v2")
+def get_bedrock_embeddings():
+    """AWS Bedrock 임베딩 모델 로드 (캐시됨, torch 불필요)"""
+    try:
+        return BedrockEmbeddings(
+            region_name="us-east-1", model_id="amazon.titan-embed-text-v1"
+        )
+    except Exception as e:
+        st.warning(f"AWS Bedrock 임베딩 초기화 실패: {e}")
+        return None
 
 
-def calculate_semantic_similarity(text1, text2, embedding_model):
-    """두 텍스트 간의 의미적 유사도 계산"""
-    embeddings = embedding_model.encode([text1, text2])
-    similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
-    return max(0.0, min(1.0, similarity))  # 0-1 범위로 제한
+def calculate_semantic_similarity(text1, text2, embedding_model=None):
+    """AWS Bedrock 임베딩 기반 유사도 계산 (torch 불필요)"""
+    try:
+        if embedding_model is None:
+            embedding_model = get_bedrock_embeddings()
+
+        # AWS 자격 증명이 없으면 바로 fallback
+        if embedding_model is None:
+            return simple_text_similarity(text1, text2)
+
+        # Bedrock 임베딩 생성
+        emb1 = embedding_model.embed_query(text1)
+        emb2 = embedding_model.embed_query(text2)
+
+        # 코사인 유사도 계산 (numpy만 사용)
+        emb1 = np.array(emb1)
+        emb2 = np.array(emb2)
+
+        dot_product = np.dot(emb1, emb2)
+        norm1 = np.linalg.norm(emb1)
+        norm2 = np.linalg.norm(emb2)
+
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+
+        similarity = dot_product / (norm1 * norm2)
+        return max(0.0, min(1.0, similarity))
+
+    except Exception as e:
+        # 처음 에러만 표시하고 이후는 조용히 fallback
+        if not hasattr(calculate_semantic_similarity, "_error_shown"):
+            st.warning(f"임베딩 계산 실패, 단어 기반 유사도로 대체: {e}")
+            calculate_semantic_similarity._error_shown = True
+        return simple_text_similarity(text1, text2)
 
 
 # OpenEvals 평가 함수 (임베딩 + LLM 하이브리드)
@@ -54,11 +107,14 @@ def run_openevals_evaluation(eval_data, model_name):
             model_name=model_name, anthropic_api_key=os.getenv("ANTHROPIC_API_KEY")
         )
 
-        # 임베딩 모델 로드
-        embedding_model = load_embedding_model()
-        st.info(
-            "임베딩 모델이 로드되었습니다. 의미적 유사도 계산을 포함한 하이브리드 평가를 수행합니다."
-        )
+        # AWS Bedrock 임베딩 로드
+        embedding_model = get_bedrock_embeddings()
+        if embedding_model is not None:
+            st.info(
+                "🚀 고품질 하이브리드 평가를 수행합니다. (LLM + AWS Bedrock 임베딩, torch 불필요)"
+            )
+        else:
+            st.info("🚀 고품질 LLM 평가를 수행합니다. (torch 불필요, fallback 지원)")
 
         # 다중 메트릭 평가 프롬프트
         evaluation_prompts = {
@@ -132,41 +188,95 @@ def run_openevals_evaluation(eval_data, model_name):
             # 각 메트릭별로 평가 실행
             for metric in metrics:
                 if metric == "semantic_similarity":
-                    # 임베딩 기반 의미적 유사도 계산
+                    # AWS Bedrock 임베딩 기반 유사도 계산
                     similarity_score = calculate_semantic_similarity(
                         data["response"], data["reference"], embedding_model
                     )
                     result_dict[metric] = similarity_score
                 else:
-                    # LLM 기반 평가
-                    judge = openevals.create_llm_as_judge(
-                        prompt=evaluation_prompts[metric], judge=model
-                    )
+                    # LLM 기반 평가 (고품질, API 키 필요)
+                    try:
+                        judge = openevals.create_llm_as_judge(
+                            prompt=evaluation_prompts[metric], judge=model
+                        )
 
-                    result = judge(
-                        question=data["question"],
-                        response=data["response"],
-                        reference=data["reference"],
-                    )
+                        result = judge(
+                            question=data["question"],
+                            response=data["response"],
+                            reference=data["reference"],
+                        )
 
-                    # 점수 추출
-                    score_text = result.get("score", "")
-                    if isinstance(score_text, str):
+                        # 점수 추출 (강화된 안전한 방식)
+                        llm_score = 0.5  # 기본값
+
                         import re
 
-                        numbers = re.findall(r"0?\.\d+|1\.0|0|1", score_text)
-                        if numbers:
-                            llm_score = float(numbers[0])
-                            llm_score = max(0.0, min(1.0, llm_score))
+                        # 여러 방법으로 점수 찾기
+                        if isinstance(result, dict):
+                            # 딕셔너리인 경우 score 키 찾기
+                            if "score" in result:
+                                score_text = str(result["score"])
+                            else:
+                                # 전체 결과를 문자열로 변환
+                                score_text = str(result)
                         else:
-                            llm_score = 0.5
-                    else:
-                        llm_score = float(score_text)
-                        llm_score = max(0.0, min(1.0, llm_score))
+                            # 결과 전체를 문자열로 변환
+                            score_text = str(result)
 
-                    # 특정 메트릭에 대해 임베딩 유사도와 결합
+                        # 숫자 패턴 찾기 (0.0 ~ 1.0 범위)
+                        numbers = re.findall(r"0?\.\d+|1\.0|1|0", score_text)
+                        if numbers:
+                            try:
+                                extracted_score = float(numbers[0])
+                                llm_score = max(0.0, min(1.0, extracted_score))
+                            except ValueError:
+                                llm_score = 0.5
+
+                    except Exception as eval_error:
+                        # LLM 평가 실패 시 텍스트 기반으로 fallback
+                        if not hasattr(run_openevals_evaluation, "_llm_fallback_shown"):
+                            st.warning(
+                                f"LLM 평가 실패, 텍스트 기반으로 대체: {eval_error}"
+                            )
+                            run_openevals_evaluation._llm_fallback_shown = True
+
+                        # Fallback to text-based evaluation
+                        if metric == "accuracy":
+                            llm_score = simple_text_similarity(
+                                data["response"], data["reference"]
+                            )
+                        elif metric == "relevance":
+                            llm_score = simple_text_similarity(
+                                data["question"], data["response"]
+                            )
+                        elif metric == "completeness":
+                            response_len = len(data["response"].split())
+                            reference_len = len(data["reference"].split())
+                            length_ratio = min(
+                                response_len / max(reference_len, 1), 1.0
+                            )
+                            content_sim = simple_text_similarity(
+                                data["response"], data["reference"]
+                            )
+                            llm_score = (length_ratio + content_sim) / 2
+                        elif metric == "clarity":
+                            sentences = (
+                                data["response"].count(".")
+                                + data["response"].count("!")
+                                + data["response"].count("?")
+                            )
+                            words = len(data["response"].split())
+                            if sentences == 0:
+                                sentences = 1
+                            avg_words_per_sentence = words / sentences
+                            clarity_score = 1.0 - abs(avg_words_per_sentence - 15) / 30
+                            llm_score = max(0.1, min(1.0, clarity_score))
+                        else:
+                            llm_score = 0.6
+
+                    # 특정 메트릭에 대해 Bedrock 임베딩 유사도와 결합
                     if metric in ["accuracy", "relevance"]:
-                        # 임베딩 유사도 계산
+                        # AWS Bedrock 임베딩 유사도 계산
                         if metric == "accuracy":
                             embedding_score = calculate_semantic_similarity(
                                 data["response"], data["reference"], embedding_model
@@ -176,7 +286,7 @@ def run_openevals_evaluation(eval_data, model_name):
                                 data["question"], data["response"], embedding_model
                             )
 
-                        # 하이브리드 점수: LLM 70% + 임베딩 30%
+                        # 하이브리드 점수: LLM 70% + Bedrock 임베딩 30%
                         hybrid_score = 0.7 * llm_score + 0.3 * embedding_score
                         result_dict[metric] = hybrid_score
                     else:
