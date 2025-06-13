@@ -1,3 +1,11 @@
 datasets
 matplotlib
-ragas
+ragas>=0.0.16
+streamlit>=1.31.0
+openevals>=0.1.0
+boto3>=1.34.0
+python-dotenv
+langchain-anthropic
+plotly
+sentence-transformers
+scikit-learn
