@@ -5,7 +5,7 @@ import boto3
 import psycopg2
 import psycopg2.extras
 from langchain_aws import BedrockEmbeddings
-from langchain.text_splitter import CharacterTextSplitter
+from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 
 s3_client = boto3.client('s3')
