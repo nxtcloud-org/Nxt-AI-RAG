@@ -1,6 +1,6 @@
-langchain
-langchain-community
-langchain-aws
-pypdf
-psycopg2-binary
-tiktoken
+langchain==1.0.5
+langchain-community==0.4.1
+langchain-aws==1.0.0
+pypdf==6.2.0
+psycopg2-binary==2.9.11
+tiktoken==0.12.0
