@@ -2,7 +2,7 @@ import boto3
 import streamlit as st
 from langchain_aws import ChatBedrock
 from langchain_aws import BedrockEmbeddings
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyMuPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 import chromadb
@@ -34,7 +34,7 @@ bedrock, embeddings = init_bedrock()
 def load_and_process_pdf():
     chroma_client = chromadb.PersistentClient(path="./vector_db")
     # 파일로드
-    pdf_loader = PyPDFLoader("./data/univ-data.pdf")
+    pdf_loader = PyMuPDFLoader("./data/univ-data.pdf")
     # 청크 분할
     splitter = CharacterTextSplitter.from_tiktoken_encoder(
         separator="\n",
