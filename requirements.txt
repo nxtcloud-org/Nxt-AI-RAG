@@ -17,8 +17,3 @@ matplotlib
 ragas>=0.1.0
 openevals>=0.1.0
 plotly
-numpy
-requests
-eval-type-backport
-pandas
-sentence-transformers
